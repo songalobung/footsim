@@ -16,7 +16,11 @@ dist/
 cache/
 *.tmp
 *.log
+scratch*
+scratch_*.json
+scratch_*.py
 
 # OS artifacts
 .DS_Store
 Thumbs.db
+
