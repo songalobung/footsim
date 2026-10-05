@@ -1,0 +1,4 @@
+segment,matches,dc_1x2_log_loss,dc_1x2_brier,dc_1x2_rps,dc_over25_log_loss,dc_btts_log_loss,pinnacle_matches,pin_1x2_log_loss,pin_1x2_brier,pin_1x2_rps,dc_1x2_log_loss_on_pin,dc_1x2_rps_on_pin
+Overall (All Seasons),760,1.00645,0.60316,0.20528,0.6891,0.68418,590,0.97381,0.5809,0.19727,0.98831,0.2014
+Season 2425,380,0.97576,0.58195,0.19907,0.68361,0.68609,380,0.96656,0.57529,0.19615,0.97576,0.19907
+Season 2526,380,1.03713,0.62437,0.21148,0.69458,0.68228,210,0.98692,0.59105,0.19929,1.01103,0.20562

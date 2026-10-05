@@ -1,0 +1,22 @@
+# Environments and dependencies
+.venv/
+env/
+venv/
+
+# Bytecode and caches
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+*.egg-info/
+build/
+dist/
+
+# Local cache & temporary files
+cache/
+*.tmp
+*.log
+
+# OS artifacts
+.DS_Store
+Thumbs.db

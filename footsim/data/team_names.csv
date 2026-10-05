@@ -1,0 +1,53 @@
+# Team name mapping: raw name (any source) -> canonical name used everywhere in footsim.
+# Canonical names are the current football-data.co.uk spellings.
+# Add a row here whenever a new team or a new source spelling appears.
+raw,canonical
+Arsenal,Arsenal
+Aston Villa,Aston Villa
+Bournemouth,Bournemouth
+AFC Bournemouth,Bournemouth
+Brentford,Brentford
+Brighton,Brighton
+Brighton & Hove Albion,Brighton
+Brighton and Hove Albion,Brighton
+Burnley,Burnley
+Chelsea,Chelsea
+Crystal Palace,Crystal Palace
+Everton,Everton
+Fulham,Fulham
+Ipswich,Ipswich
+Ipswich Town,Ipswich
+Leeds,Leeds
+Leeds United,Leeds
+Leicester,Leicester
+Leicester City,Leicester
+Liverpool,Liverpool
+Luton,Luton
+Luton Town,Luton
+Man City,Man City
+Manchester City,Man City
+Man United,Man United
+Manchester United,Man United
+Man Utd,Man United
+Newcastle,Newcastle
+Newcastle United,Newcastle
+Norwich,Norwich
+Norwich City,Norwich
+Nott'm Forest,Nott'm Forest
+Nottingham Forest,Nott'm Forest
+Nottingham,Nott'm Forest
+Sheffield United,Sheffield United
+Sheffield Utd,Sheffield United
+Southampton,Southampton
+Sunderland,Sunderland
+Tottenham,Tottenham
+Tottenham Hotspur,Tottenham
+Spurs,Tottenham
+Watford,Watford
+West Brom,West Brom
+West Bromwich Albion,West Brom
+West Ham,West Ham
+West Ham United,West Ham
+Wolves,Wolves
+Wolverhampton,Wolves
+Wolverhampton Wanderers,Wolves
