@@ -294,5 +294,26 @@ Evaluated on the last two full EPL seasons (2024–25 and 2025–26, 760 matches
 - Multi-year head-to-head records are confounded by managerial turnover, tactical shifts, and squad renewal.
 - H2H records are strictly filtered to the last 730 days (24 months). If fewer than 2 matches exist in that window, the edge is shrunk to zero. If $\ge 2$ matches exist, goal differential edge is shrunk by $0.08$ with bounds $[-0.12, +0.12]$ goals.
 
+---
+
+## Milestone 11: Pre-Match Inspection Dashboard (`footsim inspect`)
+
+### 1. Process Metrics Over Raw Scores
+- In small rolling windows (5 matches), actual match scorelines are heavily contaminated by variance (deflections, referee calls, finishing luck).
+- The inspection dashboard audits **underlying process metrics**:
+  - Expected Goals created ($\text{xGF}$) vs conceded ($\text{xGA}$) using the continuous shot-conversion model ($0.30 \cdot \text{SOT} + 0.05 \cdot \text{OffTarget}$).
+  - Shots on target ratio ($\text{SOT}_{\text{ratio}} = \text{SOT}_{\text{for}} / (\text{SOT}_{\text{for}} + \text{SOT}_{\text{against}})$).
+  - Goalkeeper saves made ($S = \max(0, \text{SOT}_{\text{against}} - \text{GA})$) and rolling save percentage.
+
+### 2. Post-Shot Expected Goals (PSxG) Goalkeeper Profiling
+- Starting goalkeepers are mapped to empirical PSxG +/- ratings derived from Opta and FBref shot-stopping tracking.
+- Top-tier shot stoppers (e.g. Alisson Becker $+0.32$, Emiliano Martinez $+0.28$, David Raya $+0.24$) consistently prevent goals above the baseline, while volatile or backup keepers leak $+0.08\text{--}+0.20$ goals per match.
+
+### 3. Referee Disciplinary Index
+- Referees exhibit persistent individual card tolerance thresholds. The inspection dashboard calculates each official's historical cards-per-match ratio against the league average rate:
+  $$\text{strictness\_index} = \frac{\bar{Y}_{\text{ref}} + \bar{R}_{\text{ref}}}{\bar{Y}_{\text{league}} + \bar{R}_{\text{league}}}$$
+  Classifying officials as *Lenient* ($< 0.88$), *Neutral* ($0.88\text{--}1.15$), or *Strict* ($> 1.15$).
+
+
 
 

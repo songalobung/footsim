@@ -201,6 +201,15 @@ footsim backtest --seasons 2023,2024
 - **Rolling 5-Match Form**: Points-per-game and goal difference shrunken via Empirical Bayes ($\pm 8\%$ maximum multiplier).
 - **Tactical 24-Month Head-to-Head**: Head-to-head records strictly bounded to the last 730 days under modern managerial setups.
 
+## Milestone 11: Pre-Match Inspection Dashboard (`footsim inspect`)
+
+- **Command**: `footsim inspect --home "Arsenal" --away "Chelsea" --referee "M Oliver"`
+- **Detailed Process Metrics**:
+  - Rolling 5-match audit with Date, Venue, Opponent, Scoreline, Result, xG Created vs Conceded, Shots on Target, Goalkeeper Saves, and Fouls.
+  - Starting Goalkeeper Shot-Stopping Profiles with Post-Shot xG (PSxG +/- goals prevented expectation per game).
+  - Tactical 24-month H2H record with individual matches and net goal differential edge.
+  - Referee Disciplinary Strictness Index evaluated against historical league card distributions.
+
 ## What not to build
 
 - No betting or staking logic.
@@ -209,8 +218,8 @@ footsim backtest --seasons 2023,2024
 
 ## Definition of done
 
-1. `pytest` passes across all test modules (86+ tests).
+1. `pytest` passes across all test modules (91+ tests).
 2. `footsim backtest` reports RPS and log loss for the last two seasons next to Pinnacle closing odds.
 3. Simulated score distribution with neutral game state matches the analytic Dixon-Coles matrix.
-4. `footsim predict` and `footsim live` run end to end for any pre-match or live in-play fixture.
+4. `footsim predict`, `footsim live`, and `footsim inspect` run end to end for any fixture.
 5. `docs/decisions.md` lists every default, prior, squad tier, and placeholder.

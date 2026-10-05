@@ -9,6 +9,12 @@ from footsim.eval.backtest import (
     run_backtest_report,
     walk_forward_backtest,
 )
+from footsim.eval.inspection import (
+    MatchInspectionReport,
+    RefereeDisciplineSummary,
+    TeamFormSummary,
+    inspect_fixture,
+)
 from footsim.eval.metrics import (
     binary_log_loss,
     brier_score,
@@ -38,4 +44,8 @@ __all__ = [
     "proportional_probs",
     "remove_margin",
     "shin_probs",
+    "inspect_fixture",
+    "MatchInspectionReport",
+    "TeamFormSummary",
+    "RefereeDisciplineSummary",
 ]

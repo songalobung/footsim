@@ -1,7 +1,7 @@
 # FootSim ⚽
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
-[![Tests Passing](https://img.shields.io/badge/pytest-86%20passed-brightgreen.svg)](https://docs.pytest.org/)
+[![Tests Passing](https://img.shields.io/badge/pytest-91%20passed-brightgreen.svg)](https://docs.pytest.org/)
 [![Performance](https://img.shields.io/badge/simulations-100k%20in%20%3C1s-orange.svg)]()
 [![Benchmark](https://img.shields.io/badge/benchmark-Pinnacle%20Closing%20Odds-success.svg)]()
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
@@ -222,7 +222,52 @@ LIVE IN-PLAY SIMULATION: Arsenal vs Chelsea (Min 65' | Score 1-0)
 ========================================================================
 ```
 
-### 4. Arbitrary Market Queries
+### 4. Pre-Match Inspection Dashboard (`footsim inspect`)
+
+Audit recent 5-game process metrics (xG, shots on target, saves, fouls), starting goalkeeper shot-stopping ratings, 24-month H2H records, and referee strictness indices before running simulations:
+
+```bash
+footsim inspect --home "Arsenal" --away "Chelsea" --referee "M Oliver"
+```
+
+```text
+============================================================================
+PRE-MATCH AUDIT: Arsenal vs Chelsea
+============================================================================
+
+[ARSENAL | RECENT FORM & PROCESS METRICS (Last 5 Matches)]
+  Record: 5-0-0 (15 pts / 15) | Net xG: +1.14 (xGF 2.09 - xGA 0.95)
+  Shooting & Defense: SOT 5.4 vs Opp SOT 2.0 | Saves/gm: 1.8 (90.0% save rate)
+  Goalkeeper: David Raya | +0.24 goals prevented/game (Elite shot-stopping & high claim rate)
+  Foul Discipline: 10.2 fouls/match committed
+  ------------------------------------------------------------------------
+  Date        Venue  Opponent          Score   Result  xG (F-A)     SOT      Saves  Fouls
+  ------------------------------------------------------------------------
+  2026-04-25  H      Newcastle         1-0     W       1.55-1.40    4-3          3     13
+  2026-05-02  H      Fulham            3-0     W       3.15-0.75    9-1          1      7
+  2026-05-10  A      West Ham          1-0     W       1.75-1.20    4-3          3     12
+  2026-05-18  H      Burnley           1-0     W       1.40-0.25    3-0          0      7
+  2026-05-24  A      Crystal Palace    2-1     W       2.60-1.15    7-3          2     12
+  ------------------------------------------------------------------------
+
+--- GOALKEEPER SHOT-STOPPING COMPARISON ---
+  Home: David Raya             | Save Rate:  90.0% | +0.24 goals prevented/game (Elite shot-stopping & high claim rate)
+  Away: Robert Sanchez         | Save Rate:  52.4% | -0.08 goals prevented/game (Volatile shot-stopping, high crosses claimed)
+
+--- HEAD-TO-HEAD (STRICT 24-MONTH TACTICAL WINDOW) ---
+  Matches: 4 | Arsenal Wins: 2 | Draws: 2 | Chelsea Wins: 0 (Net GD: +2)
+  Tactical Edge Verdict: Statistically favorable tactical edge to Arsenal (+2 GD in 4 games)
+
+--- MATCH REFEREE DISCIPLINARY PROFILE ---
+  Official: M Oliver (162 matches tracked in sample)
+  Discipline: 3.31 yellows/match, 0.142 reds/match, 21.9 fouls/match
+  Strictness Index: 91.1% of league average (Neutral / Standard tolerance)
+============================================================================
+```
+
+*(You can also pass `--inspect` directly into `footsim predict` to view this audit above the simulation output).*
+
+### 5. Arbitrary Market Queries
 
 Evaluate any custom logical expression over the simulated match space. Results include exact counts, 95% Wilson confidence intervals, and the **200-sample reliability rule**:
 

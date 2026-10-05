@@ -27,6 +27,7 @@ from footsim.data.loader import (
 )
 from footsim.eval.backtest import DEFAULT_EVAL_SEASONS, DEFAULT_REPORTS_DIR, run_backtest_report
 from footsim.eval.events import run_event_report
+from footsim.eval.inspection import inspect_fixture
 from footsim.events.rates import EventRates
 from footsim.goals.dixon_coles import DEFAULT_XI, DixonColes
 from footsim.markets.query import (
@@ -170,12 +171,18 @@ def predict(
     away_rest_days: Optional[int] = typer.Option(None, "--away-rest-days", help="Days of rest for away team"),
     form: bool = typer.Option(False, "--form", help="Apply rolling 5-match form momentum"),
     h2h: bool = typer.Option(False, "--h2h", help="Apply 24-month tactical Head-to-Head edge"),
+    inspect: bool = typer.Option(False, "--inspect", help="Display full pre-match audit dashboard (form, xG, shots, saves, H2H)"),
     save_sims: Optional[Path] = typer.Option(None, "--save-sims", help="Path to save simulation parquet"),
 ) -> None:
     """Simulate a match and print a compact prediction table."""
     # Validate teams
     home_norm = str(normalise_team_names(pd.Series([home])).iloc[0])
     away_norm = str(normalise_team_names(pd.Series([away])).iloc[0])
+
+    if inspect:
+        insp_report = inspect_fixture(home_norm, away_norm, referee=referee, league=league, as_of=as_of)
+        typer.echo(insp_report.format_dashboard())
+        typer.echo("")
 
     # Check if saved model exists or fit on the fly (<0.6s)
     dc, ev = _load_and_fit_models(
@@ -573,6 +580,27 @@ def live(
         typer.echo(f"  Score {score_str:5s}: {prob * 100:6.2f}%  ({cnt:,} sims)")
 
     typer.echo(line)
+
+
+@app.command("inspect")
+def inspect_cli(
+    home: str = typer.Option(..., "--home", "-H", help="Home team canonical or alias name"),
+    away: str = typer.Option(..., "--away", "-A", help="Away team canonical or alias name"),
+    referee: Optional[str] = typer.Option(None, "--referee", "-r", help="Match referee name"),
+    league: str = typer.Option("E0", "--league", "-l", help="League code"),
+    as_of: Optional[str] = typer.Option(None, "--as-of", help="Historical cutoff date (YYYY-MM-DD)"),
+    form_games: int = typer.Option(5, "--form-games", "-n", help="Number of rolling matches to inspect"),
+) -> None:
+    """Pre-match audit of rolling form, xG, shots, saves, fouls, and 24m H2H."""
+    report = inspect_fixture(
+        home=home,
+        away=away,
+        referee=referee,
+        league=league,
+        as_of=as_of,
+        n_form_matches=form_games,
+    )
+    typer.echo(report.format_dashboard())
 
 
 if __name__ == "__main__":
