@@ -88,13 +88,16 @@ def _load_and_fit_models(
     xi: float = DEFAULT_XI,
     xg_blend: float = 0.0,
     home_adv_mode: str = "league",
+    new_teams: Iterable[str] | None = None,
 ) -> tuple[DixonColes, EventRates]:
     """Load matches and fit DixonColes and EventRates models."""
     use_seasons = seasons or list(DEFAULT_SEASONS)
     matches = load_matches(seasons=use_seasons, league=league)
 
-    dc = DixonColes(xi=xi, xg_blend=xg_blend, home_adv_mode=home_adv_mode).fit(matches, as_of=as_of)
-    ev = EventRates().fit(matches, as_of=as_of)
+    dc = DixonColes(xi=xi, xg_blend=xg_blend, home_adv_mode=home_adv_mode).fit(
+        matches, as_of=as_of, new_teams=new_teams
+    )
+    ev = EventRates().fit(matches, as_of=as_of, new_teams=new_teams)
     return dc, ev
 
 
@@ -162,12 +165,17 @@ def predict(
     save_sims: Optional[Path] = typer.Option(None, "--save-sims", help="Path to save simulation parquet"),
 ) -> None:
     """Simulate a match and print a compact prediction table."""
-    # Check if saved model exists or fit on the fly (<0.6s)
-    dc, ev = _load_and_fit_models(league=league, as_of=as_of, xg_blend=xg_blend)
-
     # Validate teams
     home_norm = str(normalise_team_names(pd.Series([home])).iloc[0])
     away_norm = str(normalise_team_names(pd.Series([away])).iloc[0])
+
+    # Check if saved model exists or fit on the fly (<0.6s)
+    dc, ev = _load_and_fit_models(
+        league=league,
+        as_of=as_of,
+        xg_blend=xg_blend,
+        new_teams=[home_norm, away_norm],
+    )
 
     lam, mu = dc.expected_goals(home_norm, away_norm)
     rho = getattr(dc, "rho_", -0.05)
@@ -313,10 +321,9 @@ def market_cli(
     league: str = typer.Option("E0", "--league", "-l", help="League code"),
     neutral: bool = typer.Option(False, "--neutral", help="Disable game-state multipliers"),
 ) -> None:
-    """Evaluate an arbitrary market query over simulated matches."""
-    dc, ev = _load_and_fit_models(league=league, as_of=as_of)
     home_norm = str(normalise_team_names(pd.Series([home])).iloc[0])
     away_norm = str(normalise_team_names(pd.Series([away])).iloc[0])
+    dc, ev = _load_and_fit_models(league=league, as_of=as_of, new_teams=[home_norm, away_norm])
 
     sim_df = simulate_match(
         home=home_norm,
