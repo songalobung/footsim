@@ -29,6 +29,7 @@ from scipy.optimize import minimize
 from scipy.special import gammaln
 from scipy.stats import poisson
 
+from footsim.data.ewma import OpponentAdjustedEWMA
 from footsim.data.loader import season_start_year
 from footsim.goals.copula import copula_score_matrix
 
@@ -129,11 +130,15 @@ class DixonColes:
         maxiter: int = 2000,
         xg_blend: float = 0.0,
         home_adv_mode: str = "league",
+        ewma_weight: float = 0.0,
+        ewma_alpha: float = 0.15,
     ) -> None:
         if xi < 0:
             raise ValueError("xi must be >= 0")
         if not (0.0 <= xg_blend <= 1.0):
             raise ValueError("xg_blend must be in [0.0, 1.0]")
+        if not (0.0 <= ewma_weight <= 1.0):
+            raise ValueError("ewma_weight must be in [0.0, 1.0]")
         if home_adv_mode not in ("league", "team"):
             raise ValueError(f"Unknown home_adv_mode {home_adv_mode!r}")
         self.xi = xi
@@ -148,6 +153,9 @@ class DixonColes:
         self.maxiter = maxiter
         self.xg_blend = xg_blend
         self.home_adv_mode = home_adv_mode
+        self.ewma_weight = ewma_weight
+        self.ewma_alpha = ewma_alpha
+
 
     # ------------------------------------------------------------------ fit
     def fit(
@@ -290,7 +298,13 @@ class DixonColes:
         self.converged_ = bool(res.success)
         self.opt_result_ = res
         self.fit_seconds_ = time.perf_counter() - t0
+        if self.ewma_weight > 0:
+            ewma_eng = OpponentAdjustedEWMA(alpha=self.ewma_alpha)
+            ewma_eng.compute_all_prematch_features(matches.loc[keep].copy())
+            self.ewma_ratings_ = ewma_eng.team_ratings
         return self
+
+
 
     # ------------------------------------------------- promoted-team prior
     @staticmethod
@@ -473,7 +487,18 @@ class DixonColes:
         h_adv = self.team_home_adv_.get(home, self.home_adv_) if hasattr(self, "team_home_adv_") else self.home_adv_
         lam = np.exp(self.intercept_ + ah + da + h_adv)
         mu = np.exp(self.intercept_ + aa + dh)
+
+        if getattr(self, "ewma_weight", 0.0) > 0 and hasattr(self, "ewma_ratings_"):
+            r_h = self.ewma_ratings_.get(home)
+            r_a = self.ewma_ratings_.get(away)
+            if r_h is not None and r_a is not None:
+                ewma_lam = self.ewma_weight * (np.log(r_h.attack_rating) + np.log(r_a.defence_rating))
+                ewma_mu = self.ewma_weight * (np.log(r_a.attack_rating) + np.log(r_h.defence_rating))
+                lam *= np.exp(ewma_lam)
+                mu *= np.exp(ewma_mu)
+
         return float(lam), float(mu)
+
 
     def score_matrix(
         self,

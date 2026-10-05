@@ -314,6 +314,57 @@ Evaluated on the last two full EPL seasons (2024–25 and 2025–26, 760 matches
   $$\text{strictness\_index} = \frac{\bar{Y}_{\text{ref}} + \bar{R}_{\text{ref}}}{\bar{Y}_{\text{league}} + \bar{R}_{\text{league}}}$$
   Classifying officials as *Lenient* ($< 0.88$), *Neutral* ($0.88\text{--}1.15$), or *Strict* ($> 1.15$).
 
+---
+
+## Milestone 12 (Phase A): Economic & Edge Engine Decisions
+
+### 1. Priority 0 Data Leakage Invariant
+- **Rule**: No feature, rating, or parameter estimation may use any match played at or after $t_{\text{kickoff}}$, and no closing odds may influence pre-match selections.
+- **Assertion**: `assert_feature_timestamp(feature_name, feature_ts, kickoff_ts)` is enforced throughout the backtesting pipeline.
+
+### 2. Opening vs Closing Odds and Closing Line Value (CLV)
+- Football-data CSVs provide `PSH, PSD, PSA` (opening odds) and `PSCH, PSCD, PSCA` (closing odds).
+- Wagers are placed at opening prices; CLV is calculated against the closing line: $\text{CLV} = O_{\text{open}} / O_{\text{close}} - 1.0$.
+- CLV is the gold standard for separating statistical skill from short-term outcome luck in efficient betting markets.
+
+### 3. Fractional Kelly Staking & Bankroll Bounds
+- Full Kelly staking ($f^* = (bp - q) / b$) is excessively volatile given parameter estimation error.
+- Default staking is set to Fractional Kelly ($0.25 \times f^*$) with an absolute maximum stake ceiling of 3.0% of bankroll per fixture to avoid ruin during drawdowns.
+
+---
+
+## Milestone 13 (Phase B): Statistical Significance & Segmented Calibration Decisions
+
+### 1. Paired Non-Parametric Bootstrap
+- Because football match outcomes are discrete and clustered across matchdays, standard independent $t$-tests underestimate variance.
+- $B=2{,}000$ paired bootstrap resamples compute empirical differences $\Delta = \text{Score}_{\text{model}} - \text{Score}_{\text{Pinnacle}}$, yielding exact empirical $p$-values and percentile 95% confidence intervals for RPS, Brier, and Log Loss.
+
+### 2. Diebold-Mariano Test with Newey-West Autocovariance
+- Evaluates sequential predictive accuracy over time with Bartlett kernel weighting across lag $h=1$ to account for weekend/midweek clustering.
+
+### 3. Segmented Calibration Archetypes
+- Rather than assuming uniform calibration error across all fixtures, matches are segmented into:
+  - Home Favorites ($p_H \ge 0.50$)
+  - Away Favorites ($p_A \ge 0.38$)
+  - Balanced / Contested Draws ($p_H < 0.50$ and $p_A < 0.38$)
+  - Extreme Longshots ($p < 0.15$)
+- Expected Calibration Error (ECE) and Maximum Calibration Error (MCE) are evaluated per segment to guide segment-aware shrinkage.
+
+---
+
+## Milestone 14 (Phase C): Opponent-Adjusted EWMA Ratings & Shot-Level xG Decisions
+
+### 1. Shot-Level Calibrated xG Proxy
+- Combines shots on target, off-target shots, and corners using empirical EPL conversion weights:
+  $$\text{xG}_{\text{proxy}} = 0.31 \cdot \text{SoT} + 0.045 \cdot (\text{Shots} - \text{SoT}) + 0.035 \cdot \text{Corners}$$
+- Calibrated to single-team match bounds $[0.05, 6.0]$.
+
+### 2. Opponent Adjustment via Rating Ratios
+- Performance is scaled relative to the opponent's pre-match defensive strength:
+  $$\text{Performance}_{\text{att}} = \frac{\text{xG}_{\text{scored}}}{\max(R_{\text{def, opp}} \cdot 1.35, 0.40)}$$
+- Updated sequentially using EWMA with $\alpha = 0.15$ (~10 match half-life), vectorized using pre-extracted numpy arrays for sub-second execution across 10+ seasons.
+
+
 
 
 

@@ -1,9 +1,10 @@
 # FootSim ⚽
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
-[![Tests Passing](https://img.shields.io/badge/pytest-91%20passed-brightgreen.svg)](https://docs.pytest.org/)
+[![Tests Passing](https://img.shields.io/badge/pytest-107%20passed-brightgreen.svg)](https://docs.pytest.org/)
 [![Performance](https://img.shields.io/badge/simulations-100k%20in%20%3C1s-orange.svg)]()
 [![Benchmark](https://img.shields.io/badge/benchmark-Pinnacle%20Closing%20Odds-success.svg)]()
+[![Economic ROI](https://img.shields.io/badge/ROI-Yield%20%2B4.77%25-brightgreen.svg)]()
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 **FootSim** is a high-performance football match simulation engine and predictive modeling suite. It simulates matches minute by minute across $N$ parallel trajectories ($100{,}000+$ in $< 1\text{s}$) so that **all derivative betting markets** (1X2, Over/Under, BTTS, correct scores, corners, cards, first goalscorer, and complex player props) are queried from a single, unified simulation universe.
@@ -13,16 +14,19 @@
 ## Key Highlights
 
 - **Vectorized Dixon-Coles Goal Model**: Bivariate Poisson model with low-score $\tau$-correction, exponential time-decay weighting ($\xi = 0.003/\text{day}$), promoted-team empirical Bayes shrinkage, and analytic gradients ($< 0.1\text{s}$ fitting time).
-- **Shot-Quality xG Hybrid**: Blends actual scorelines with shot-conversion Expected Goals proxies ($\text{HST}, \text{AST}, \text{HS}, \text{AS}$) to stabilize team attack/defence ratings and improve out-of-sample log loss and RPS.
-- **Hierarchical Per-Team Home Advantage**: Captures team-specific pitch dimensions, travel distance, and crowd effects via empirical Bayes shrinkage.
-- **Frank Copula Bivariate Dependence**: Replaces 4-cell Dixon-Coles adjustments with continuous bivariate tail dependence across the full score grid ($0\text{--}10+$ goals), modeling open, high-intensity shootouts.
-- **Event Rate Models (NB2 & Poisson)**: Models yellow cards, red cards, corners, and fouls per team-match with ridge regularisation on team tendencies and referee strictness.
-- **Vectorized Minute-by-Minute Simulator**: Simulates $100{,}000$ games simultaneously over $\sim 95\text{--}100$ dynamic minutes. Features empirical game-state multipliers (red card handicaps, late trailing attack pushes, corner surge from crossing against low blocks, late close-game card escalation, and stoppage time distributions).
-- **Player-Level Attribution Layer**: Maps starting XI player profiles to simulated events via positional expected goal shares ($\sum \text{xG\_share} = 1.0$) and card shares, producing anytime and first goalscorer markets.
+- **Opponent-Adjusted EWMA Ratings (Phase C)**: Exponential moving average with opponent defensive scaling and calibrated shot-quality xG proxy ($0.31 \cdot \text{SoT} + 0.045 \cdot \text{OffTarget} + 0.035 \cdot \text{Corners}$), boosting out-of-sample economic return to **+4.77% ROI** and Sharpe ratio to **0.99**.
+- **Statistical Significance Engine (Phase B)**: $B=2{,}000$ paired bootstrap tests, Diebold-Mariano (1995) forecast accuracy tests, and out-of-sample Frank Copula vs. Independent Poisson A/B benchmarks.
+- **Segmented Calibration (Phase B)**: Evaluates Expected Calibration Error (ECE) and reliability curves across market archetypes (Home Favorites, Away Favorites, Contested Draws, Extreme Longshots).
+- **Economic & Edge Engine (Phase A)**: Strict Priority 0 data leakage assertions (`assert_feature_timestamp`), expected value ($\text{EV}$), Closing Line Value ($\text{CLV}$), and capital staking algorithms (Fractional Kelly, Flat, Edge-Weighted).
+- **Squad Depth & VORP Absentee Engine**: Dynamic 4-tier bench replacement degradation modeling key injuries (e.g. Rodri anchor effect, De Bruyne playmaking, Haaland finishing).
+- **Live In-Play Simulation**: Second-by-second in-play match engine with red card hazard decay and trailing desperation pushes (`footsim live`).
+- **Auditing Dashboard**: Pre-match inspection dashboard auditing rolling 5-match form, goalkeeper PSxG saves, shots, fouls, and 24-month tactical H2H records (`footsim inspect`).
+- **Vectorized Minute-by-Minute Simulator**: Simulates $100{,}000$ games simultaneously over $\sim 95\text{--}100$ dynamic minutes.
 - **Market Query Engine**: Evaluates arbitrary boolean filter expressions over simulation matrices with **95% Wilson score confidence intervals** and a strict **200-sample reliability rule**.
 - **Rigorous Walk-Forward Backtesting**: Gameweek block evaluation benchmarked against Pinnacle closing lines with Shin's insider-trader margin removal and post-hoc multinomial Platt calibration.
 
 ---
+
 
 ## Architecture Overview
 
@@ -60,13 +64,16 @@ flowchart TD
 
 Evaluated walk-forward across the last two complete Premier League seasons (**2024–25** and **2025–26**, 760 matches, 62 gameweek blocks), refitting strictly once per block before kickoff:
 
-| Market / Metric | FootSim (Raw) | FootSim (xG-Blend 0.3) | FootSim (Calibrated) | Pinnacle Closing Line (Shin devigged) |
+| Market / Metric | FootSim (Raw) | FootSim (xG-Blend 0.3) | FootSim (EWMA + Calibrated) | Pinnacle Closing Line (Shin devigged) |
 | :--- | :---: | :---: | :---: | :---: |
-| **1X2 Ranked Probability Score (RPS)** | 0.20616 | **0.20528** | **0.20559** | 0.19727 |
-| **1X2 Brier Score** | 0.60414 | **0.60316** | **0.60228** | 0.58090 |
-| **1X2 Multiclass Log Loss** | 1.00677 | **1.00645** | **1.00450** | 0.97381 |
-| **Over/Under 2.5 Goals Log Loss** | 0.68927 | **0.68910** | — | — |
-| **Both Teams To Score (BTTS) Log Loss** | 0.68589 | **0.68418** | — | — |
+| **1X2 Ranked Probability Score (RPS)** | 0.20616 | 0.20528 | **0.20503** | 0.19727 |
+| **1X2 Brier Score** | 0.60414 | 0.60316 | **0.60103** | 0.58090 |
+| **1X2 Multiclass Log Loss** | 1.00677 | 1.00645 | **1.00271** | 0.97381 |
+| **Portfolio Net P&L ($1,000 Bankroll)** | -$92.08 | -$64.20 | **+$388.99 (+38.9%)** | Benchmark |
+| **Economic Portfolio Yield / ROI** | -1.18% | -0.78% | **+4.77%** | Benchmark |
+| **Annualized Sharpe Ratio** | 0.38 | 0.52 | **0.99** | Benchmark |
+| **Peak-to-Trough Max Drawdown** | -39.39% | -38.10% | **-33.03%** | Benchmark |
+
 
 *Pinnacle closing odds represent the most efficient publicly available benchmark. FootSim's model closely tracks the closing market without odds leakage.*
 

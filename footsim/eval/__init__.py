@@ -9,6 +9,24 @@ from footsim.eval.backtest import (
     run_backtest_report,
     walk_forward_backtest,
 )
+from footsim.eval.betting import (
+    BettingSimulationResult,
+    EdgeResult,
+    assert_feature_timestamp,
+    calculate_edge_and_ev,
+    calculate_stake,
+    run_economic_backtest,
+)
+from footsim.eval.calibration import (
+    CalibratedResult,
+    PlattCalibrator,
+    SegmentMetrics,
+    SegmentedCalibrationReport,
+    SegmentedCalibrator,
+    calculate_ece_mce,
+    evaluate_calibration,
+    evaluate_segmented_calibration,
+)
 from footsim.eval.inspection import (
     MatchInspectionReport,
     RefereeDisciplineSummary,
@@ -26,6 +44,14 @@ from footsim.eval.odds import (
     proportional_probs,
     remove_margin,
     shin_probs,
+)
+from footsim.eval.significance import (
+    CopulaABResult,
+    SignificanceResult,
+    compare_model_against_market,
+    diebold_mariano_test,
+    paired_bootstrap_test,
+    run_copula_ab_benchmark,
 )
 
 __all__ = [
@@ -48,4 +74,24 @@ __all__ = [
     "MatchInspectionReport",
     "TeamFormSummary",
     "RefereeDisciplineSummary",
+    "assert_feature_timestamp",
+    "calculate_edge_and_ev",
+    "calculate_stake",
+    "run_economic_backtest",
+    "BettingSimulationResult",
+    "EdgeResult",
+    "SignificanceResult",
+    "CopulaABResult",
+    "paired_bootstrap_test",
+    "diebold_mariano_test",
+    "compare_model_against_market",
+    "run_copula_ab_benchmark",
+    "SegmentMetrics",
+    "SegmentedCalibrationReport",
+    "SegmentedCalibrator",
+    "calculate_ece_mce",
+    "evaluate_calibration",
+    "evaluate_segmented_calibration",
 ]
+
+

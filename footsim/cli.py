@@ -26,8 +26,10 @@ from footsim.data.loader import (
     normalise_team_names,
 )
 from footsim.eval.backtest import DEFAULT_EVAL_SEASONS, DEFAULT_REPORTS_DIR, run_backtest_report
+from footsim.eval.betting import calculate_edge_and_ev
 from footsim.eval.events import run_event_report
 from footsim.eval.inspection import inspect_fixture
+from footsim.eval.odds import shin_probs
 from footsim.events.rates import EventRates
 from footsim.goals.dixon_coles import DEFAULT_XI, DixonColes
 from footsim.markets.query import (
@@ -91,17 +93,26 @@ def _load_and_fit_models(
     xi: float = DEFAULT_XI,
     xg_blend: float = 0.0,
     home_adv_mode: str = "league",
+    ewma_weight: float = 0.0,
+    ewma_alpha: float = 0.15,
     new_teams: Iterable[str] | None = None,
 ) -> tuple[DixonColes, EventRates]:
     """Load matches and fit DixonColes and EventRates models."""
     use_seasons = seasons or list(DEFAULT_SEASONS)
     matches = load_matches(seasons=use_seasons, league=league)
 
-    dc = DixonColes(xi=xi, xg_blend=xg_blend, home_adv_mode=home_adv_mode).fit(
+    dc = DixonColes(
+        xi=xi,
+        xg_blend=xg_blend,
+        home_adv_mode=home_adv_mode,
+        ewma_weight=ewma_weight,
+        ewma_alpha=ewma_alpha,
+    ).fit(
         matches, as_of=as_of, new_teams=new_teams
     )
     ev = EventRates().fit(matches, as_of=as_of, new_teams=new_teams)
     return dc, ev
+
 
 
 @app.command()
@@ -172,6 +183,9 @@ def predict(
     form: bool = typer.Option(False, "--form", help="Apply rolling 5-match form momentum"),
     h2h: bool = typer.Option(False, "--h2h", help="Apply 24-month tactical Head-to-Head edge"),
     inspect: bool = typer.Option(False, "--inspect", help="Display full pre-match audit dashboard (form, xG, shots, saves, H2H)"),
+    odds: Optional[str] = typer.Option(None, "--odds", help="Comma-separated market decimal odds (Home, Draw, Away, e.g. '1.95, 3.60, 4.20')"),
+    ewma_weight: float = typer.Option(0.0, "--ewma-weight", help="Weight given to opponent-adjusted EWMA ratings [0.0, 1.0]"),
+    ewma_alpha: float = typer.Option(0.15, "--ewma-alpha", help="EWMA memory decay parameter (default 0.15)"),
     save_sims: Optional[Path] = typer.Option(None, "--save-sims", help="Path to save simulation parquet"),
 ) -> None:
     """Simulate a match and print a compact prediction table."""
@@ -189,8 +203,11 @@ def predict(
         league=league,
         as_of=as_of,
         xg_blend=xg_blend,
+        ewma_weight=ewma_weight,
+        ewma_alpha=ewma_alpha,
         new_teams=[home_norm, away_norm],
     )
+
 
     lam, mu = dc.expected_goals(home_norm, away_norm)
     rho = getattr(dc, "rho_", -0.05)
@@ -289,6 +306,25 @@ def predict(
         f"  Away Win (A):    {p_1x2['A'].prob*100:6.2f}%  "
         f"[95% CI: {p_1x2['A'].ci_lower*100:5.2f}% - {p_1x2['A'].ci_upper*100:5.2f}%]"
     )
+
+    if odds:
+        try:
+            h_odd, d_odd, a_odd = [float(x.strip()) for x in odds.split(",")]
+            m_probs = shin_probs(np.array([h_odd, d_odd, a_odd]))
+            h_edge = calculate_edge_and_ev(p_1x2["H"].prob, h_odd, devigged_prob=m_probs[0])
+            d_edge = calculate_edge_and_ev(p_1x2["D"].prob, d_odd, devigged_prob=m_probs[1])
+            a_edge = calculate_edge_and_ev(p_1x2["A"].prob, a_odd, devigged_prob=m_probs[2])
+
+            typer.echo("\n--- MARKET ODDS, EDGE & EXPECTED VALUE (EV) ---")
+            for sel_name, edge_r in [("Home Win (H)", h_edge), ("Draw     (D)", d_edge), ("Away Win (A)", a_edge)]:
+                val_tag = "  >>> VALUE BET <<<" if edge_r.is_value else ""
+                typer.echo(
+                    f"  {sel_name}: Odds {edge_r.market_odds:5.2f} (Implied {edge_r.devigged_prob*100:5.2f}%) | "
+                    f"Fair {edge_r.fair_odds:5.2f} | Edge {edge_r.edge*100:+5.2f}% | EV {edge_r.ev*100:+5.2f}%{val_tag}"
+                )
+        except Exception as e:
+            typer.echo(f"  Note: Could not parse market odds '{odds}': {e}")
+
 
     typer.echo("\n--- GOALS: OVER / UNDER & BTTS ---")
     typer.echo(
@@ -446,10 +482,60 @@ def backtest(
         "--calibrate/--no-calibrate",
         help="Perform post-hoc probability calibration on walk-forward outputs",
     ),
+    economic: bool = typer.Option(
+        False,
+        "--economic/--no-economic",
+        help="Simulate portfolio execution, edge & EV tracking, CLV, and Kelly staking",
+    ),
+    min_edge: float = typer.Option(
+        0.02,
+        "--min-edge",
+        help="Minimum probability edge required to place a bet (e.g. 0.02 = +2.0%)",
+    ),
+    min_ev: float = typer.Option(
+        0.02,
+        "--min-ev",
+        help="Minimum expected value required to place a bet (e.g. 0.02 = +2.0%)",
+    ),
+    staking: str = typer.Option(
+        "fractional_kelly",
+        "--staking",
+        help="Capital staking strategy: 'fractional_kelly', 'flat', or 'edge_weighted'",
+    ),
+    kelly_fraction: float = typer.Option(
+        0.25,
+        "--kelly-fraction",
+        help="Multiplier on full Kelly stake [0.05, 0.50]",
+    ),
+    significance: bool = typer.Option(
+        False,
+        "--significance/--no-significance",
+        help="Run paired bootstrap hypothesis tests comparing FootSim vs Pinnacle closing line",
+    ),
+    segmented_cal: bool = typer.Option(
+        False,
+        "--segmented-cal/--no-segmented-cal",
+        help="Evaluate reliability across match segments (Favorites, Balanced, Longshots)",
+    ),
+    ewma_weight: float = typer.Option(
+        0.0,
+        "--ewma-weight",
+        help="Weight given to opponent-adjusted EWMA ratings [0.0, 1.0]",
+    ),
+    ewma_alpha: float = typer.Option(
+        0.15,
+        "--ewma-alpha",
+        help="EWMA memory decay parameter (default 0.15)",
+    ),
 ) -> None:
     """Run walk-forward backtest comparing model predictions with Pinnacle closing odds."""
     season_list = _parse_seasons(seasons)
-    typer.echo(f"Running walk-forward backtest for seasons: {season_list} (xg_blend={xg_blend}, home_adv_mode={home_adv_mode}, calibrate={calibrate})")
+    typer.echo(
+        f"Running walk-forward backtest for seasons: {season_list} "
+        f"(xg_blend={xg_blend}, home_adv_mode={home_adv_mode}, calibrate={calibrate}, "
+        f"economic={economic}, significance={significance}, segmented_cal={segmented_cal}, "
+        f"ewma_weight={ewma_weight})"
+    )
     run_backtest_report(
         seasons=season_list,
         reports_dir=reports_dir,
@@ -458,7 +544,18 @@ def backtest(
         xg_blend=xg_blend,
         home_adv_mode=home_adv_mode,
         calibrate=calibrate,
+        economic=economic,
+        min_edge=min_edge,
+        min_ev=min_ev,
+        staking=staking,
+        kelly_fraction=kelly_fraction,
+        significance=significance,
+        segmented_cal=segmented_cal,
+        ewma_weight=ewma_weight,
+        ewma_alpha=ewma_alpha,
     )
+
+
 
 
 @app.command("backtest-events")

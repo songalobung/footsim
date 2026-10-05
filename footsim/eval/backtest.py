@@ -22,7 +22,9 @@ import numpy as np
 import pandas as pd
 
 from footsim.data.loader import DEFAULT_SEASONS, load_matches
-from footsim.eval.calibration import evaluate_calibration
+from footsim.eval.betting import run_economic_backtest
+from footsim.eval.calibration import evaluate_calibration, evaluate_segmented_calibration
+from footsim.eval.significance import compare_model_against_market
 from footsim.eval.metrics import (
     binary_log_loss,
     brier_score,
@@ -141,6 +143,9 @@ def walk_forward_backtest(
                 "dc_pUnder25": p_under25,
                 "dc_pBTTS": p_btts,
                 "dc_pBTTS_No": p_btts_no,
+                "PSH": getattr(match, "PSH", np.nan),
+                "PSD": getattr(match, "PSD", np.nan),
+                "PSA": getattr(match, "PSA", np.nan),
                 "pin_H_odds": pin_h,
                 "pin_D_odds": pin_d,
                 "pin_A_odds": pin_a,
@@ -307,6 +312,15 @@ def run_backtest_report(
     xg_blend: float = 0.0,
     home_adv_mode: str = "league",
     calibrate: bool = False,
+    economic: bool = False,
+    min_edge: float = 0.02,
+    min_ev: float = 0.02,
+    staking: str = "fractional_kelly",
+    kelly_fraction: float = 0.25,
+    significance: bool = False,
+    segmented_cal: bool = False,
+    ewma_weight: float = 0.0,
+    ewma_alpha: float = 0.15,
     **model_kwargs,
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """Execute complete backtest, save all reports, and return result frames.
@@ -316,6 +330,7 @@ def run_backtest_report(
     - {reports_dir}/backtest_summary.csv
     - {reports_dir}/calibration_table.csv
     - {reports_dir}/calibration_plot.png
+    - {reports_dir}/economic_bets.csv (if economic=True)
 
     Returns:
         (predictions_df, summary_df, calibration_df)
@@ -332,8 +347,11 @@ def run_backtest_report(
         margin_method=margin_method,
         xg_blend=xg_blend,
         home_adv_mode=home_adv_mode,
+        ewma_weight=ewma_weight,
+        ewma_alpha=ewma_alpha,
         **model_kwargs,
     )
+
 
     if calibrate:
         probs = pred_df[["dc_pH", "dc_pD", "dc_pA"]].to_numpy()
@@ -346,6 +364,23 @@ def run_backtest_report(
         print(f"  Raw 1X2 RPS:      {cal_res.raw_rps:.5f} -> Calibrated: {cal_res.cal_rps:.5f}")
         print(f"  Raw Brier:        {cal_res.raw_brier:.5f} -> Calibrated: {cal_res.cal_brier:.5f}")
 
+    if segmented_cal:
+        probs = pred_df[["dc_pH", "dc_pD", "dc_pA"]].to_numpy()
+        seg_report = evaluate_segmented_calibration(probs, pred_df["outcome_1x2"])
+        print("\n" + seg_report.format_report())
+
+    if significance:
+        print("\n" + "=" * 76)
+        print("PAIRED BOOTSTRAP SIGNIFICANCE TESTS: FOOTSIM VS PINNACLE CLOSING LINE")
+        print("=" * 76)
+        try:
+            sig_results = compare_model_against_market(pred_df)
+            for m_name, res in sig_results.items():
+                print("  " + res.format_summary())
+        except Exception as e:
+            print(f"  Unable to complete significance test: {e}")
+        print("=" * 76)
+
     summary_df = compute_summary_metrics(pred_df)
     cal_df = compute_all_calibrations(pred_df)
 
@@ -354,6 +389,18 @@ def run_backtest_report(
     cal_df.to_csv(reports_dir / "calibration_table.csv", index=False)
     plot_calibration(cal_df, reports_dir / "calibration_plot.png")
 
+    if economic:
+        econ_res = run_economic_backtest(
+            backtest_df=pred_df,
+            min_edge=min_edge,
+            min_ev=min_ev,
+            staking_mode=staking,
+            kelly_fraction=kelly_fraction,
+        )
+        print("\n" + econ_res.format_report())
+        if len(econ_res.bets_df) > 0:
+            econ_res.bets_df.to_csv(reports_dir / "economic_bets.csv", index=False)
+
     elapsed = time.perf_counter() - t0
     print(f"\n--- Backtest Finished in {elapsed:.2f}s ---")
     print(f"Reports saved to {reports_dir.resolve()}/")
@@ -361,6 +408,7 @@ def run_backtest_report(
     print(summary_df.to_string(index=False))
 
     return pred_df, summary_df, cal_df
+
 
 
 if __name__ == "__main__":
