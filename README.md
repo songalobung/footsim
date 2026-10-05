@@ -1,7 +1,7 @@
 # FootSim ⚽
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
-[![Tests Passing](https://img.shields.io/badge/pytest-80%20passed-brightgreen.svg)](https://docs.pytest.org/)
+[![Tests Passing](https://img.shields.io/badge/pytest-86%20passed-brightgreen.svg)](https://docs.pytest.org/)
 [![Performance](https://img.shields.io/badge/simulations-100k%20in%20%3C1s-orange.svg)]()
 [![Benchmark](https://img.shields.io/badge/benchmark-Pinnacle%20Closing%20Odds-success.svg)]()
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
@@ -158,7 +158,71 @@ Goal intensities: Home lambda = 1.94, Away mu = 0.78 (Total: 2.72) | Sim time: 1
 ========================================================================
 ```
 
-### 2. Arbitrary Market Queries
+### 2. Squad Availability, Key Absences & Schedule Congestion (VORP)
+
+When key players are absent, FootSim evaluates **Value Over Replacement Player (VORP)** based on club squad depth tiers ($R_{\text{tier}} \in [0.28, 0.76]$) and positional asymmetry (e.g. defensive anchors like Rodri increase concession $+22\%$, while strikers drop attacking $\lambda$):
+
+```bash
+footsim predict --home "Man City" --away "Liverpool" --home-absent "Rodri, Haaland" --home-rest-days 3 --away-rest-days 7 --sims 100000
+```
+
+```text
+========================================================================
+MATCH SIMULATION: Man City vs Liverpool (N = 100,000 sims)
+Goal intensities: Home lambda = 1.76, Away mu = 1.24 (Total: 3.00) | Sim time: 1.84s
+========================================================================
+
+--- SQUAD AVAILABILITY, KEY ABSENCES & REST ---
+  Squad Depth: Man City (Tier 1, Depth Index 0.86) | Liverpool (Tier 2, Depth Index 0.78)
+  * Absence [Rodri (DM)]: Defensive anchor out; +5.3% concession hazard, -1.4% transition control
+  * Absence [Haaland (FW)]: Primary finisher out; -11.9% attack (bench replacement factor 0.76)
+  * Congestion (3d rest): -1.1% attack, +1.3% concession (Squad depth index 0.86)
+
+--- 1X2 MATCH RESULT ---
+  Home Win (H):     49.82%  [95% CI: 49.51% - 50.13%]
+  Draw     (D):     25.40%  [95% CI: 25.13% - 25.67%]
+  Away Win (A):     24.78%  [95% CI: 24.51% - 25.05%]
+```
+
+### 3. Live In-Play Match Simulation (`footsim live`)
+
+Simulate remaining minutes dynamically from an in-play match state, accounting for current score, elapsed minutes, active red cards, corner urgency, and close-game card escalation:
+
+```bash
+footsim live --home Arsenal --away Chelsea --minute 65 --score 1-0 --home-reds 0 --away-reds 1 --sims 50000
+```
+
+```text
+========================================================================
+LIVE IN-PLAY SIMULATION: Arsenal vs Chelsea (Min 65' | Score 1-0)
+  ACTIVE HAZARDS: Chelsea RED CARDS: 1
+  Remaining Exp Goals: Arsenal 0.99, Chelsea 0.19 | Sim time: 0.15s (50,000 sims)
+========================================================================
+
+--- FULL-TIME 1X2 OUTCOMES (FROM CURRENT STATE) ---
+  Home Win (Arsenal):  92.59%
+  Draw:                   6.67%
+  Away Win (Chelsea):   0.74%
+
+--- NEXT TEAM TO SCORE ---
+  Arsenal:               58.22%
+  Chelsea:               11.07%
+  No More Goals:         30.71%
+
+--- PROJECTED FULL-TIME TOTAL GOALS ---
+  Over  1.5:  69.53%  |  Under  1.5:  30.47%
+  Over  2.5:  32.46%  |  Under  2.5:  67.54%
+  Over  3.5:  10.89%  |  Under  3.5:  89.11%
+
+--- TOP PROJECTED FINAL SCORES ---
+  Score 2-0  :  30.84%  (15,420 sims)
+  Score 1-0  :  30.47%  (15,235 sims)
+  Score 3-0  :  15.28%  ( 7,640 sims)
+  Score 1-1  :   6.23%  ( 3,115 sims)
+========================================================================
+```
+
+### 4. Arbitrary Market Queries
 
 Evaluate any custom logical expression over the simulated match space. Results include exact counts, 95% Wilson confidence intervals, and the **200-sample reliability rule**:
 

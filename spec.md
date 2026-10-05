@@ -165,6 +165,42 @@ footsim backtest --seasons 2023,2024
 
 `predict` prints a compact table: 1X2, top 10 correct scores, over/under 1.5/2.5/3.5, BTTS, expected cards and corners, red-card probability.
 
+## Milestone 7: Advanced Engine Enhancements
+
+- **Frank Copula Discrete Bivariate Distribution**: Full-range score dependence across all 0-10+ goals beyond Dixon-Coles 0-0/1-0/0-1/1-1 tau limitation.
+- **Hierarchical Empirical Bayes Home Advantage**: Team-specific home advantage parameters shrunk toward league baseline.
+- **Shot-Conversion xG Proxy**: Blending raw goals with shots on target and total shots.
+- **Secondary Event Urgency Multipliers**: Late-game trailing corner urgency (+30%), close-match card escalation (+25%), and derby rivalry modifiers (+20% cards/fouls).
+- **Player-Level Simulation Layer**: Lineups, individual xG/card shares, anytime & first goalscorer attribution.
+- **Post-Hoc Probability Calibration**: Multinomial logistic Platt calibrator.
+
+## Milestone 8: Squad Availability, VORP & Schedule Congestion
+
+- **Squad Depth Tiers & Bench Replacement Quality**:
+  - Clubs partitioned into Depth Tiers (Tier 1: City/Chelsea, Tier 2: Arsenal/Liverpool/etc., Tier 3: Mid-table, Tier 4: Shallow).
+  - Bench replacement factor $R_{\text{tier}} \in [0.28, 0.76]$ based on bench market value and wage bill.
+- **Positional Asymmetry & VORP**:
+  - Missing Strikers/Wingers (FW): Attacking $\lambda$ degrades by $-\text{xg\_share} \times (1 - R_{\text{tier}}) \times 1.15$.
+  - Missing Playmakers (AM/MF): Decreases attacking $\lambda$ and increases opponent $\mu$.
+  - Missing Defensive Midfield Anchors (CDM, "The Rodri Effect"): Increases opponent concession $\mu$ by $+22\% \times (1 - R_{\text{tier}})$ and decreases $\lambda$ by $-6\%$.
+  - Missing Center-Backs (CB) and Goalkeepers (GK): Increases concession $\mu$ by $+18\%\text{--}+24\%$.
+- **Rest Days & Schedule Congestion**:
+  - Turnaround $\le 3$ days penalizes attack and increases late concession inversely scaled by squad depth index.
+
+## Milestone 9: Live In-Play Match Simulation
+
+- **Command**: `footsim live --home Arsenal --away Chelsea --minute 65 --score 1-0 --home-reds 0 --away-reds 1 --sims 50000`
+- **Dynamic Time & State Scaling**:
+  - Scales remaining baseline intensities by $(94 - \text{minute}) / 90$.
+  - Active Red Card Hazard: $-32\%$ scoring and $+38\%$ concession per active red card.
+  - Urgency & Desperation: Trailing teams push for equalizers with $+35\%$ corner frequency and vulnerability to counters.
+  - In-Play Markets: Full-time 1X2 from current state, Next Goal (Home / Away / No More Goals), In-play Over/Under totals, and top projected final scores.
+
+## Milestone 10: Rolling Form Momentum & Tactical H2H
+
+- **Rolling 5-Match Form**: Points-per-game and goal difference shrunken via Empirical Bayes ($\pm 8\%$ maximum multiplier).
+- **Tactical 24-Month Head-to-Head**: Head-to-head records strictly bounded to the last 730 days under modern managerial setups.
+
 ## What not to build
 
 - No betting or staking logic.
@@ -173,8 +209,8 @@ footsim backtest --seasons 2023,2024
 
 ## Definition of done
 
-1. `pytest` passes.
+1. `pytest` passes across all test modules (86+ tests).
 2. `footsim backtest` reports RPS and log loss for the last two seasons next to Pinnacle closing odds.
 3. Simulated score distribution with neutral game state matches the analytic Dixon-Coles matrix.
-4. `footsim predict` runs end to end for any upcoming fixture.
-5. `docs/decisions.md` lists every default, prior, and placeholder, so each can be replaced later.
+4. `footsim predict` and `footsim live` run end to end for any pre-match or live in-play fixture.
+5. `docs/decisions.md` lists every default, prior, squad tier, and placeholder.

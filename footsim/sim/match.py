@@ -24,6 +24,7 @@ from footsim.sim.config import (
     default_minute_profile,
 )
 from footsim.sim.players import Lineup, assign_player_events, get_team_lineup
+from footsim.sim.squad import adjust_squad_and_absences, reconstruct_lineup_with_absences
 
 # League average defaults when event models are not supplied
 DEFAULT_RATES = {
@@ -56,6 +57,10 @@ def simulate_match(
     player_layer: bool = False,
     home_lineup: Lineup | None = None,
     away_lineup: Lineup | None = None,
+    home_absent: Sequence[str] | str | None = None,
+    away_absent: Sequence[str] | str | None = None,
+    home_rest_days: int | None = None,
+    away_rest_days: int | None = None,
 ) -> pd.DataFrame:
     """Simulate N matches minute by minute.
 
@@ -71,6 +76,11 @@ def simulate_match(
         neutral: if True, sets all game-state multipliers to 1.0 (analytical mode).
         save_path: optional filepath to save output as Parquet.
         lam, mu, rho: direct overrides for goal model parameters.
+        is_derby: force derby rivalry multipliers.
+        player_layer: attribute goals and cards to individual players.
+        home_lineup, away_lineup: custom starting lineups.
+        home_absent, away_absent: absent players to evaluate via VORP.
+        home_rest_days, away_rest_days: days of rest since prior fixture.
 
     Returns:
         DataFrame with one row per simulated match.
@@ -95,6 +105,30 @@ def simulate_match(
             lam, mu, rho = 1.45, 1.15, -0.05
     if rho is None:
         rho = 0.0
+
+    # Apply squad, key absence, and schedule congestion adjustments
+    squad_notes: list[str] = []
+    if home_absent or home_rest_days is not None:
+        lam, mu, _, h_notes = adjust_squad_and_absences(
+            team=home,
+            base_lam=lam,
+            base_mu=mu,
+            absent_players=home_absent,
+            rest_days=home_rest_days,
+            lineup=home_lineup,
+        )
+        squad_notes.extend(h_notes)
+
+    if away_absent or away_rest_days is not None:
+        mu, lam, _, a_notes = adjust_squad_and_absences(
+            team=away,
+            base_lam=mu,
+            base_mu=lam,
+            absent_players=away_absent,
+            rest_days=away_rest_days,
+            lineup=away_lineup,
+        )
+        squad_notes.extend(a_notes)
 
     # 2. Event rates (cards, corners, fouls)
     if events_model is not None:
@@ -414,6 +448,10 @@ def simulate_match(
     if player_layer:
         h_lineup = home_lineup or get_team_lineup(home)
         a_lineup = away_lineup or get_team_lineup(away)
+        if home_absent:
+            h_lineup, _ = reconstruct_lineup_with_absences(h_lineup, home_absent)
+        if away_absent:
+            a_lineup, _ = reconstruct_lineup_with_absences(a_lineup, away_absent)
         df = assign_player_events(df, h_lineup, a_lineup, seed=seed)
 
     if save_path is not None:
@@ -429,6 +467,7 @@ def simulate_match(
     df.attrs["lam"] = lam
     df.attrs["mu"] = mu
     df.attrs["rho"] = rho
+    df.attrs["squad_notes"] = squad_notes
 
     return df
 

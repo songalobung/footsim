@@ -246,4 +246,53 @@ Evaluated on the last two full EPL seasons (2024–25 and 2025–26, 760 matches
   $$z'_k = a \cdot \ln(p_k) + b_k, \quad p'_k = \text{softmax}(z')$$
   Evaluated on walk-forward predictions to produce calibrated probability outputs.
 
+---
+
+## Milestone 8: Squad Availability, VORP & Schedule Congestion
+
+### 1. Value Over Replacement Player (VORP)
+- **Problem**: In naive Poisson or team-aggregate models, player absences are either ignored completely or treated as losing 100% of their goal contribution.
+- **Solution**: Team attacking output degrades by the difference between the absent starter and their bench replacement:
+  $$\lambda_{\text{adj}} = \lambda_{\text{base}} \times \left[ 1 - \sum_{p \in \text{Absences}} \text{xG\_share}_p \cdot (1 - R_{\text{tier}}) \right]$$
+  where $R_{\text{tier}}$ is the empirical bench replacement factor ($0.76$ for Tier 1 elite squads like Man City down to $0.28$ for Tier 4 shallow squads like Ipswich).
+
+### 2. Positional Asymmetry ("The Rodri Effect")
+- **Asymmetric Impact**:
+  - Missing Strikers/Wingers (FW): Primarily suppresses attacking expected goals $\lambda$.
+  - Missing Defensive Midfielders (DM / CDM): Central transition anchors destabilize the team structure. Concession $\mu$ jumps by $+22\% \times (1 - R_{\text{tier}})$ and attack drops $-6\%$.
+  - Missing Center-Backs (CB) and Goalkeepers (GK): Concession jumps by $+18\%\text{--}+24\%$.
+
+### 3. Rest Days & Schedule Congestion
+- **Short Turnaround Degradation**:
+  - When days of rest between matches $\le 3$, physical energy and sprint intensity decay:
+    $$\Delta \lambda = -0.08 \cdot \frac{4 - \text{rest\_days}}{4} \cdot (1 - 0.5 \cdot D_{\text{team}})$$
+    $$\Delta \mu = +0.09 \cdot \frac{4 - \text{rest\_days}}{4} \cdot (1 - 0.5 \cdot D_{\text{team}})$$
+  - Squad depth index $D_{\text{team}}$ buffers deep teams against congestion decay.
+
+---
+
+## Milestone 9: Live In-Play Match Simulation (`footsim live`)
+
+### 1. Time-Proportional Arrival & Active Red Card Hazard
+- **Time Fraction**: For in-play minute $m \in [0, 90]$, remaining expected minutes $t_{\text{rem}} = \max(1, 94 - m) / 90.0$.
+- **Active Red Cards**:
+  - Scoring penalty: $\lambda_{\text{rem}} = \lambda \cdot t_{\text{rem}} \cdot (1 - 0.32 \cdot r_{\text{home}})$.
+  - Concession penalty: $\mu_{\text{rem}} = \mu \cdot t_{\text{rem}} \cdot (1 + 0.38 \cdot r_{\text{home}})$.
+- **Analytical Next Goal**:
+  $$P(\text{No more goals}) = e^{-(\lambda_{\text{rem}} + \mu_{\text{rem}})}$$
+  $$P(\text{Home scores next}) = (1 - P(\text{No more goals})) \cdot \frac{\lambda_{\text{rem}}}{\lambda_{\text{rem}} + \mu_{\text{rem}}}$$
+
+---
+
+## Milestone 10: Rolling Form Momentum & Tactical Head-to-Head
+
+### 1. Rolling 5-Match Form Momentum
+- Calculates points per game (PPG) over the last 5 fixtures compared against the baseline league expectation ($1.35$ PPG).
+- Applies Empirical Bayes shrinkage with a conservative scaling factor ($0.15$), capping total form momentum adjustment to $\pm 8\%$ to prevent overfitting to short-term variance.
+
+### 2. Tactical Head-to-Head (H2H) Window (24 Months)
+- Multi-year head-to-head records are confounded by managerial turnover, tactical shifts, and squad renewal.
+- H2H records are strictly filtered to the last 730 days (24 months). If fewer than 2 matches exist in that window, the edge is shrunk to zero. If $\ge 2$ matches exist, goal differential edge is shrunk by $0.08$ with bounds $[-0.12, +0.12]$ goals.
+
+
 

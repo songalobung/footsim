@@ -39,8 +39,10 @@ from footsim.markets.query import (
     market_total_cards,
     market_total_corners,
 )
+from footsim.sim.inplay import LiveState, simulate_live
 from footsim.sim.match import simulate_match
 from footsim.sim.players import get_team_lineup, player_scorer_probs
+from footsim.sim.squad import calculate_h2h_edge, calculate_recent_form, get_squad_tier
 
 DEFAULT_MODEL_DIR = Path(__file__).resolve().parents[1] / "cache" / "models"
 
@@ -162,6 +164,12 @@ def predict(
     xg_blend: float = typer.Option(0.0, "--xg-blend", help="Weight given to shot-conversion expected goals proxy [0.0, 1.0]"),
     derby: Optional[bool] = typer.Option(None, "--derby/--no-derby", help="Force derby rivalry mode (auto-detected if None)"),
     player_layer: bool = typer.Option(False, "--player-layer", help="Simulate individual player scorers and cards"),
+    home_absent: Optional[str] = typer.Option(None, "--home-absent", help="Comma-separated absent home players (e.g. 'Haaland, Rodri')"),
+    away_absent: Optional[str] = typer.Option(None, "--away-absent", help="Comma-separated absent away players (e.g. 'Salah')"),
+    home_rest_days: Optional[int] = typer.Option(None, "--home-rest-days", help="Days of rest for home team"),
+    away_rest_days: Optional[int] = typer.Option(None, "--away-rest-days", help="Days of rest for away team"),
+    form: bool = typer.Option(False, "--form", help="Apply rolling 5-match form momentum"),
+    h2h: bool = typer.Option(False, "--h2h", help="Apply 24-month tactical Head-to-Head edge"),
     save_sims: Optional[Path] = typer.Option(None, "--save-sims", help="Path to save simulation parquet"),
 ) -> None:
     """Simulate a match and print a compact prediction table."""
@@ -181,6 +189,19 @@ def predict(
     rho = getattr(dc, "rho_", -0.05)
     ev_rates = ev.expected(home_norm, away_norm, referee=referee)
 
+    # Optional form momentum and H2H adjustments
+    if form or h2h:
+        hist_matches = load_matches(league=league)
+        if form:
+            h_form, _ = calculate_recent_form(home_norm, hist_matches, as_of=as_of)
+            a_form, _ = calculate_recent_form(away_norm, hist_matches, as_of=as_of)
+            lam *= h_form
+            mu *= a_form
+        if h2h:
+            edge, _ = calculate_h2h_edge(home_norm, away_norm, hist_matches, as_of=as_of)
+            lam = max(0.2, lam + edge)
+            mu = max(0.2, mu - edge)
+
     sim_df = simulate_match(
         home=home_norm,
         away=away_norm,
@@ -192,6 +213,13 @@ def predict(
         neutral=neutral,
         is_derby=derby,
         player_layer=player_layer,
+        home_absent=home_absent,
+        away_absent=away_absent,
+        home_rest_days=home_rest_days,
+        away_rest_days=away_rest_days,
+        lam=lam,
+        mu=mu,
+        rho=rho,
         save_path=save_sims,
     )
 
@@ -213,6 +241,8 @@ def predict(
     exp_ca = float(ev_rates.get("away_corners", 0.0))
 
     sim_time = sim_df.attrs.get("elapsed_seconds", 0.0)
+    actual_lam = sim_df.attrs.get("lam", lam)
+    actual_mu = sim_df.attrs.get("mu", mu)
 
     # Format compact table
     ref_str = f" | Referee: {referee}" if referee else ""
@@ -222,10 +252,22 @@ def predict(
     typer.echo(line)
     typer.echo(hdr)
     typer.echo(
-        f"Goal intensities: Home lambda = {lam:.2f}, Away mu = {mu:.2f} (Total: {lam+mu:.2f}) | "
+        f"Goal intensities: Home lambda = {actual_lam:.2f}, Away mu = {actual_mu:.2f} (Total: {actual_lam+actual_mu:.2f}) | "
         f"Sim time: {sim_time:.2f}s"
     )
     typer.echo(line)
+
+    squad_notes = sim_df.attrs.get("squad_notes", [])
+    if squad_notes:
+        h_tier = get_squad_tier(home_norm)
+        a_tier = get_squad_tier(away_norm)
+        typer.echo("\n--- SQUAD AVAILABILITY, KEY ABSENCES & REST ---")
+        typer.echo(
+            f"  Squad Depth: {home_norm} (Tier {h_tier.tier}, Depth Index {h_tier.depth_index:.2f}) | "
+            f"{away_norm} (Tier {a_tier.tier}, Depth Index {a_tier.depth_index:.2f})"
+        )
+        for note in squad_notes:
+            typer.echo(f"  * {note}")
 
     typer.echo("\n--- 1X2 MATCH RESULT ---")
     typer.echo(
@@ -436,5 +478,103 @@ def backtest_events(
     )
 
 
+@app.command()
+def live(
+    home: str = typer.Option(..., "--home", "-H", help="Home team canonical or alias name"),
+    away: str = typer.Option(..., "--away", "-A", help="Away team canonical or alias name"),
+    minute: int = typer.Option(0, "--minute", "-m", help="Current match minute (0 to 90+)"),
+    score: str = typer.Option("0-0", "--score", help="Current scoreline, e.g. '1-0', '2-1'"),
+    home_reds: int = typer.Option(0, "--home-reds", help="Current active home red cards"),
+    away_reds: int = typer.Option(0, "--away-reds", help="Current active away red cards"),
+    home_corners: int = typer.Option(0, "--home-corners", help="Current home corners"),
+    away_corners: int = typer.Option(0, "--away-corners", help="Current away corners"),
+    home_cards: int = typer.Option(0, "--home-cards", help="Current home cards"),
+    away_cards: int = typer.Option(0, "--away-cards", help="Current away cards"),
+    sims: int = typer.Option(50_000, "--sims", "-n", help="Number of simulations"),
+    seed: int = typer.Option(42, "--seed", help="Random seed for reproducibility"),
+    league: str = typer.Option("E0", "--league", "-l", help="League code"),
+    as_of: Optional[str] = typer.Option(None, "--as-of", help="Historical cutoff date"),
+) -> None:
+    """Simulate remaining match outcomes dynamically from an in-play live state."""
+    home_norm = str(normalise_team_names(pd.Series([home])).iloc[0])
+    away_norm = str(normalise_team_names(pd.Series([away])).iloc[0])
+
+    try:
+        parts = score.split("-")
+        hg = int(parts[0].strip())
+        ag = int(parts[1].strip())
+    except Exception:
+        typer.echo(f"Error parsing score '{score}'. Format must be like '1-0' or '2-2'.")
+        raise typer.Exit(code=1)
+
+    dc, ev = _load_and_fit_models(league=league, as_of=as_of, new_teams=[home_norm, away_norm])
+    base_lam, base_mu = dc.expected_goals(home_norm, away_norm)
+    ev_rates = ev.expected(home_norm, away_norm)
+
+    state = LiveState(
+        home=home_norm,
+        away=away_norm,
+        minute=minute,
+        home_goals=hg,
+        away_goals=ag,
+        home_reds=home_reds,
+        away_reds=away_reds,
+        home_corners=home_corners,
+        away_corners=away_corners,
+        home_cards=home_cards,
+        away_cards=away_cards,
+    )
+
+    res = simulate_live(
+        state=state,
+        base_lam=base_lam,
+        base_mu=base_mu,
+        n=sims,
+        seed=seed,
+        base_home_corners=float(ev_rates.get("home_corners", 5.60)),
+        base_away_corners=float(ev_rates.get("away_corners", 4.70)),
+        base_home_cards=float(ev_rates.get("home_yellows", 1.70)),
+        base_away_cards=float(ev_rates.get("away_yellows", 1.90)),
+    )
+
+    hdr = f"LIVE IN-PLAY SIMULATION: {home_norm} vs {away_norm} (Min {minute}' | Score {hg}-{ag})"
+    line = "=" * max(len(hdr), 72)
+    typer.echo(line)
+    typer.echo(hdr)
+    hazards = []
+    if home_reds > 0:
+        hazards.append(f"{home_norm} RED CARDS: {home_reds}")
+    if away_reds > 0:
+        hazards.append(f"{away_norm} RED CARDS: {away_reds}")
+    if hazards:
+        typer.echo(f"  ACTIVE HAZARDS: {', '.join(hazards)}")
+    typer.echo(
+        f"  Remaining Exp Goals: {home_norm} {res.rem_home_exp:.2f}, {away_norm} {res.rem_away_exp:.2f} | "
+        f"Sim time: {res.elapsed_seconds:.2f}s ({sims:,} sims)"
+    )
+    typer.echo(line)
+
+    typer.echo("\n--- FULL-TIME 1X2 OUTCOMES (FROM CURRENT STATE) ---")
+    typer.echo(f"  Home Win ({home_norm}): {res.ft_home_win_prob * 100:6.2f}%")
+    typer.echo(f"  Draw:                 {res.ft_draw_prob * 100:6.2f}%")
+    typer.echo(f"  Away Win ({away_norm}): {res.ft_away_win_prob * 100:6.2f}%")
+
+    typer.echo("\n--- NEXT TEAM TO SCORE ---")
+    typer.echo(f"  {home_norm}:              {res.next_goal_probs['home'] * 100:6.2f}%")
+    typer.echo(f"  {away_norm}:              {res.next_goal_probs['away'] * 100:6.2f}%")
+    typer.echo(f"  No More Goals:        {res.next_goal_probs['none'] * 100:6.2f}%")
+
+    typer.echo("\n--- PROJECTED FULL-TIME TOTAL GOALS ---")
+    for th, p in res.over_under_probs.items():
+        typer.echo(f"  Over {th:4.1f}: {p['over']*100:6.2f}%  |  Under {th:4.1f}: {p['under']*100:6.2f}%")
+
+    typer.echo("\n--- TOP PROJECTED FINAL SCORES ---")
+    for score_str, prob, cnt in res.top_final_scores[:6]:
+        typer.echo(f"  Score {score_str:5s}: {prob * 100:6.2f}%  ({cnt:,} sims)")
+
+    typer.echo(line)
+
+
 if __name__ == "__main__":
     app()
+

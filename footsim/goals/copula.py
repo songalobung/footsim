@@ -66,3 +66,34 @@ def copula_score_matrix(
     m = C[1:, 1:] - C[:-1, 1:] - C[1:, :-1] + C[:-1, :-1]
     m = np.maximum(m, 0.0)
     return m / m.sum()
+
+
+def simulate_bivariate_copula(
+    lam: float,
+    mu: float,
+    theta: float = 0.25,
+    n: int = 100_000,
+    max_goals: int = 10,
+    seed: int | None = None,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Sample N pairs of (home_goals, away_goals) from the Frank Copula joint distribution.
+
+    Args:
+        lam: expected home goals.
+        mu: expected away goals.
+        theta: copula dependence parameter.
+        n: number of simulation draws.
+        max_goals: max score boundary per team.
+        seed: RNG seed.
+
+    Returns:
+        tuple of (home_goals, away_goals) 1D numpy arrays of length n.
+    """
+    rng = np.random.default_rng(seed)
+    prob_matrix = copula_score_matrix(lam=lam, mu=mu, theta=theta, max_goals=max_goals)
+    flat_probs = prob_matrix.ravel()
+    flat_probs = flat_probs / flat_probs.sum()
+    flat_indices = rng.choice(len(flat_probs), size=n, p=flat_probs)
+    h_goals, a_goals = np.unravel_index(flat_indices, prob_matrix.shape)
+    return h_goals.astype(np.int16), a_goals.astype(np.int16)
+
